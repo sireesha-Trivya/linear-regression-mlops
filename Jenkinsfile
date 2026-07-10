@@ -8,27 +8,25 @@ pipeline {
 
     stages {
 
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
         stage('Verify Tools') {
             steps {
                 sh '''
-                python3 --version
-                pip3 --version
-                docker --version
-                git --version
+                    echo "===== Checking Installed Tools ====="
+                    python3 --version
+                    pip3 --version
+                    docker --version
+                    git --version
                 '''
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Create Virtual Environment') {
             steps {
                 sh '''
-                pip3 install -r requirements.txt
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
                 '''
             }
         }
@@ -36,7 +34,8 @@ pipeline {
         stage('Train Model') {
             steps {
                 sh '''
-                python3 train.py
+                    . venv/bin/activate
+                    python train.py
                 '''
             }
         }
@@ -44,40 +43,59 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 sh '''
-                docker build -t $IMAGE_NAME:$IMAGE_TAG .
+                    docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
                 '''
             }
         }
 
-        stage('Push Docker Image') {
+        stage('DockerHub Login & Push') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
+                    usernameVariable: 'DOCKER_USERNAME',
+                    passwordVariable: 'DOCKER_PASSWORD'
                 )]) {
 
                     sh '''
-                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                    docker push $IMAGE_NAME:$IMAGE_TAG
+                        echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+                        docker push ${IMAGE_NAME}:${IMAGE_TAG}
                     '''
                 }
             }
         }
 
-        stage('Deploy') {
+        stage('Deploy Application') {
             steps {
                 sh '''
-                docker stop linear-app || true
-                docker rm linear-app || true
+                    docker stop linear-app || true
+                    docker rm linear-app || true
 
-                docker run -d \
-                --name linear-app \
-                -p 5000:5000 \
-                $IMAGE_NAME:$IMAGE_TAG
+                    docker run -d \
+                        --name linear-app \
+                        -p 5000:5000 \
+                        ${IMAGE_NAME}:${IMAGE_TAG}
                 '''
             }
         }
+    }
 
+    post {
+        success {
+            echo '====================================='
+            echo 'Pipeline executed successfully!'
+            echo 'Application deployed successfully!'
+            echo '====================================='
+        }
+
+        failure {
+            echo '====================================='
+            echo 'Pipeline execution failed.'
+            echo 'Check Console Output for errors.'
+            echo '====================================='
+        }
+
+        always {
+            cleanWs()
+        }
     }
 }
