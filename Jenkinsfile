@@ -1,101 +1,57 @@
 pipeline {
+
     agent any
 
     environment {
         IMAGE_NAME = "siri987/linear-regression-mlops"
-        IMAGE_TAG = "latest"
+        IMAGE_TAG  = "latest"
+        CONTAINER_NAME = "linear-app"
     }
 
     stages {
 
-        stage('Verify Tools') {
+        stage('Checkout') {
             steps {
-                sh '''
-                    echo "===== Checking Installed Tools ====="
-                    python3 --version
-                    pip3 --version
-                    docker --version
-                    git --version
-                '''
+                checkout scm
             }
         }
 
-        stage('Create Virtual Environment') {
+        stage('Verify Docker') {
             steps {
-                sh '''
-                    python3 -m venv venv
-                    . venv/bin/activate
-                    pip install --upgrade pip
-                    pip install -r requirements.txt
-                '''
-            }
-        }
-
-        stage('Train Model') {
-            steps {
-                sh '''
-                    . venv/bin/activate
-                    python train.py
-                '''
+                sh 'docker --version'
             }
         }
 
         stage('Build Docker Image') {
             steps {
                 sh '''
-                    docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                docker build -t $IMAGE_NAME:$IMAGE_TAG .
                 '''
             }
         }
 
-        stage('DockerHub Login & Push') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub',
-                    usernameVariable: 'DOCKER_USERNAME',
-                    passwordVariable: 'DOCKER_PASSWORD'
-                )]) {
-
-                    sh '''
-                        echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-                        docker push ${IMAGE_NAME}:${IMAGE_TAG}
-                    '''
-                }
-            }
-        }
-
-        stage('Deploy Application') {
+        stage('Push Docker Image') {
             steps {
                 sh '''
-                    docker stop linear-app || true
-                    docker rm linear-app || true
-
-                    docker run -d \
-                        --name linear-app \
-                        -p 5000:5000 \
-                        ${IMAGE_NAME}:${IMAGE_TAG}
+                docker login -u YOUR_DOCKER_USERNAME -p YOUR_DOCKER_PASSWORD
+                docker push $IMAGE_NAME:$IMAGE_TAG
                 '''
             }
         }
-    }
 
-    post {
-        success {
-            echo '====================================='
-            echo 'Pipeline executed successfully!'
-            echo 'Application deployed successfully!'
-            echo '====================================='
+        stage('Deploy Container') {
+            steps {
+                sh '''
+                docker stop $CONTAINER_NAME || true
+                docker rm $CONTAINER_NAME || true
+
+                docker run -d \
+                    --name $CONTAINER_NAME \
+                    -p 5000:5000 \
+                    $IMAGE_NAME:$IMAGE_TAG
+                '''
+            }
         }
 
-        failure {
-            echo '====================================='
-            echo 'Pipeline execution failed.'
-            echo 'Check Console Output for errors.'
-            echo '====================================='
-        }
-
-        always {
-            cleanWs()
-        }
     }
 }
