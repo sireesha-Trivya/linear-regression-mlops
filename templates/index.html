@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Salary Prediction</title>
+</head>
+
+<body>
+
+    <h1>Linear Regression Salary Predictor</h1>
+
+    <form action="/predict" method="post">
+
+        <label>Years of Experience</label>
+
+        <input
+            type="number"
+            name="years"
+            step="0.1"
+            required>
+
+        <br><br>
+
+        <input
+            type="submit"
+            value="Predict Salary">
+
+    </form>
+
+    <br>
+
+    <h2>{{ prediction_text }}</h2>
+
+</body>
+
+</html>
